@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>教室同步計時器 Firebase版</title>
+
+<style>
+body {
+    margin:0;
+    font-family:monospace;
+    background:#0f172a;
+    color:#38bdf8;
+    text-align:center;
+}
+
+/* 顯示 */
+#display {
+    font-size:15vw;
+    height:100vh;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+/* 控制 */
+#panel {
+    position:fixed;
+    bottom:0;
+    width:100%;
+    background:#1e293b;
+    padding:10px;
+}
+
+#mini {
+    position:fixed;
+    top:10px;
+    right:10px;
+    width:120px;
+    height:70px;
+    background:black;
+    color:#0f0;
+    display:none;
+    align-items:center;
+    justify-content:center;
+    cursor:move;
+}
+
+/* 閃紅 */
+.flash {
+    animation:flash 0.5s 6;
+}
+@keyframes flash {
+    50% { background:red; color:white; }
+}
+</style>
+</head>
+
+<body>
+
+<div id="display">00</div>
+<div id="mini">00</div>
+
+<div id="panel">
+⏳ <input id="sec" type="number" value="60" style="width:60px;">
+<button onclick="start()">開始</button>
+<button onclick="pause()">暫停</button>
+<button onclick="reset()">重設</button>
+<button onclick="toggleMini()">縮小</button>
+</div>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<script>
+// 🔥 這裡填你的 Firebase 設定
+const firebaseConfig = {
+  apiKey: "填這裡",
+  authDomain: "填這裡",
+  databaseURL: "填這裡",
+  projectId: "填這裡",
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ===== 同步節點 =====
+const room = "classroom1";
+const ref = db.ref("timer/" + room);
+
+// ===== 本地狀態 =====
+let timer=null;
+let endTime=0;
+
+// ===== 控制 =====
+function start(){
+    let s=parseInt(sec.value)||0;
+    let data={
+        action:"start",
+        duration:s,
+        startAt:Date.now()
+    };
+    ref.set(data);
+}
+
+function pause(){
+    ref.set({action:"pause"});
+}
+
+function reset(){
+    ref.set({action:"reset"});
+}
+
+// ===== 接收同步 =====
+ref.on("value", snap=>{
+    let data=snap.val();
+    if(!data) return;
+
+    if(data.action==="start"){
+        endTime = data.startAt + data.duration*1000;
+        run();
+    }
+
+    if(data.action==="pause"){
+        clearInterval(timer);
+    }
+
+    if(data.action==="reset"){
+        clearInterval(timer);
+        display.innerText="00";
+    }
+});
+
+// ===== 計時 =====
+function run(){
+    clearInterval(timer);
+    timer=setInterval(()=>{
+        let remain=Math.max(0,endTime-Date.now());
+        let s=Math.ceil(remain/1000);
+
+        display.innerText=s;
+        mini.innerText=s;
+
+        if(remain<=0){
+            clearInterval(timer);
+            document.body.classList.add("flash");
+            setTimeout(()=>document.body.classList.remove("flash"),3000);
+        }
+    },50);
+}
+
+// ===== 浮動窗 =====
+function toggleMini(){
+    mini.style.display = mini.style.display==="flex" ? "none" : "flex";
+}
+
+// 拖曳
+let isDrag=false,ox,oy;
+mini.onmousedown=e=>{
+    isDrag=true; ox=e.offsetX; oy=e.offsetY;
+};
+document.onmousemove=e=>{
+    if(isDrag){
+        mini.style.left=(e.clientX-ox)+"px";
+        mini.style.top=(e.clientY-oy)+"px";
+        mini.style.right="auto";
+    }
+};
+document.onmouseup=()=>isDrag=false;
+
+</script>
+</body>
+</html>
